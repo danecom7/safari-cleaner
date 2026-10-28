@@ -57,7 +57,7 @@ struct ScanItem: Identifiable, Sendable {
     enum Status: Sendable { case found, missing, noAccess, refused }
 
     let id = UUID()
-    let label: String
+    var label: String
     let url: URL
     /// The folder itself stays, only what's inside goes.
     var contentsOnly = false
@@ -68,6 +68,8 @@ struct ScanItem: Identifiable, Sendable {
     var status: Status = .missing
     var files = 0
     var bytes: Int64 = 0
+    /// Delete just these entries of the folder instead of everything inside (whitelisted sites stay).
+    var only: [URL]? = nil
 }
 
 enum Scanner {

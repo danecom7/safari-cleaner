@@ -101,11 +101,6 @@ enum HistoryDatabase {
         var topSites: [(String, Int)] = []
     }
 
-    struct Failure: LocalizedError {
-        let errorDescription: String?
-        init(_ text: String) { errorDescription = text }
-    }
-
     /// Disk space taken by the database together with its -wal and -shm files.
     static func size(of database: URL) -> Int64 {
         ["", "-wal", "-shm"].reduce(0) { total, suffix in
@@ -185,38 +180,14 @@ enum HistoryDatabase {
             try db.query("PRAGMA quick_check") { stmt in
                 if let text = sqlite3_column_text(stmt, 0) { check = String(cString: text) }
             }
-            guard check == "ok" else { throw Failure("проверка целостности файла не пройдена (\(check))") }
+            guard check == "ok" else { throw CleanerError("проверка целостности файла не пройдена (\(check))") }
         }
     }
 
     /// `edit` on the live file with a safety copy: restored on any failure, removed on success.
     static func editWithBackup(_ database: URL, cutoff: Double) throws {
-        let fm = FileManager.default
-        let backup = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("SafariCleaner/History-backup", isDirectory: true)
-        let suffixes = ["", "-wal", "-shm"]
-        try? fm.removeItem(at: backup)
-        try fm.createDirectory(at: backup, withIntermediateDirectories: true)
-        for suffix in suffixes where fm.fileExists(atPath: database.path + suffix) {
-            try fm.copyItem(atPath: database.path + suffix, toPath: backup.appendingPathComponent("History.db" + suffix).path)
-        }
-        do {
-            try edit(database, cutoff: cutoff)
-        } catch {
-            do {
-                for suffix in suffixes {
-                    let live = database.path + suffix
-                    let saved = backup.appendingPathComponent("History.db" + suffix).path
-                    if fm.fileExists(atPath: live) { try fm.removeItem(atPath: live) }
-                    if fm.fileExists(atPath: saved) { try fm.copyItem(atPath: saved, toPath: live) }
-                }
-            } catch let restoreError {
-                throw Failure("\(error.localizedDescription). Вернуть резервную копию не удалось (\(restoreError.localizedDescription)), она лежит в \(backup.path)")
-            }
-            try? fm.removeItem(at: backup)
-            throw Failure("\(error.localizedDescription). Ничего не изменено: история восстановлена из резервной копии.")
-        }
-        try? fm.removeItem(at: backup)
+        let files = ["", "-wal", "-shm"].map { URL(fileURLWithPath: database.path + $0) }
+        try Backup.protect(files, named: "History") { try edit(database, cutoff: cutoff) }
     }
 }
 
@@ -230,7 +201,7 @@ private final class SQLiteDB {
         var handle: OpaquePointer?
         guard sqlite3_open_v2(url.path, &handle, SQLITE_OPEN_READWRITE, nil) == SQLITE_OK, let handle else {
             sqlite3_close(handle)
-            throw HistoryDatabase.Failure("файл истории не открывается")
+            throw CleanerError("файл истории не открывается")
         }
         defer { sqlite3_close(handle) }
         sqlite3_busy_timeout(handle, 5000)
@@ -240,7 +211,7 @@ private final class SQLiteDB {
     func query(_ sql: String, _ args: [Double] = [], row: (OpaquePointer) -> Void = { _ in }) throws {
         var stmt: OpaquePointer?
         guard sqlite3_prepare_v2(handle, sql, -1, &stmt, nil) == SQLITE_OK, let stmt else {
-            throw HistoryDatabase.Failure("формат истории не распознан (\(String(cString: sqlite3_errmsg(handle))))")
+            throw CleanerError("формат истории не распознан (\(String(cString: sqlite3_errmsg(handle))))")
         }
         defer { sqlite3_finalize(stmt) }
         for (index, value) in args.enumerated() { sqlite3_bind_double(stmt, Int32(index + 1), value) }
@@ -248,7 +219,7 @@ private final class SQLiteDB {
             let rc = sqlite3_step(stmt)
             if rc == SQLITE_ROW { row(stmt); continue }
             if rc == SQLITE_DONE { return }
-            throw HistoryDatabase.Failure("ошибка базы истории (\(String(cString: sqlite3_errmsg(handle))))")
+            throw CleanerError("ошибка базы истории (\(String(cString: sqlite3_errmsg(handle))))")
         }
     }
 

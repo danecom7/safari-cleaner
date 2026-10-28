@@ -13,6 +13,18 @@ struct SafariCleanerApp: App {
                 Button("Очистить историю…") { model.cleanHistory() }
             }
             .disabled(model.isBusy)
+            Menu("Белый список cookies (\(model.whitelist.count))") {
+                if model.whitelist.isEmpty {
+                    Text("Пока пусто")
+                }
+                ForEach(model.whitelist, id: \.self) { domain in
+                    Menu(domain) {
+                        Button("Удалить из белого списка") { model.removeFromWhitelist(domain) }
+                    }
+                }
+                Divider()
+                Button("Добавить сайт…") { model.addToWhitelist() }
+            }
             Divider()
             Toggle("Тестовый режим (ничего не удалять)", isOn: $model.testMode)
             Divider()
@@ -27,6 +39,7 @@ final class AppModel: ObservableObject {
     /// On at every launch: deleting must always be a deliberate choice.
     @Published var testMode = true
     @Published private(set) var isBusy = false
+    @Published private(set) var whitelist = WhitelistStore.load()
     private var reportWindow: NSWindow?
     private var testNote: String {
         testMode ? "\n\nТестовый режим: ничего не будет удалено, вы увидите только отчёт." : ""
@@ -41,10 +54,49 @@ final class AppModel: ObservableObject {
 
     func cleanCookies() {
         guard ensureAccess() else { return }
+        let kept = whitelist.isEmpty
+            ? ""
+            : "\n\nОстанутся сайты из белого списка: " + whitelist.joined(separator: ", ") + "."
         guard confirm("Очистить cookies и данные сайтов?",
-                      "Вы выйдете из аккаунтов на сайтах. Продолжить?" + testNote,
+                      "Вы выйдете из аккаунтов на сайтах. Продолжить?" + kept + testNote,
                       button: "Продолжить") else { return }
-        perform(needsHistoryServiceClosed: false) { _ in CookiesCleaner.scan() }
+        let list = Whitelist(domains: whitelist)
+        perform(needsHistoryServiceClosed: false) { CookiesCleaner.scan(whitelist: list, testMode: $0) }
+    }
+
+    // MARK: - Whitelist
+
+    func addToWhitelist() {
+        let a = alert("Добавить сайт в белый список",
+                      "Cookies и данные этого сайта и всех его поддоменов не будут удаляться. "
+                      + "Например, google.com сохраняет и mail.google.com.")
+        let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 280, height: 24))
+        field.placeholderString = "google.com"
+        a.accessoryView = field
+        a.addButton(withTitle: "Добавить")
+        a.addButton(withTitle: "Отмена")
+        a.window.initialFirstResponder = field
+        guard a.runModal() == .alertFirstButtonReturn else { return }
+        guard let domain = Whitelist.normalize(field.stringValue) else {
+            alert("Не похоже на адрес сайта",
+                  "Введите домен латиницей, например google.com или https://mail.google.com.").runModal()
+            return
+        }
+        guard !whitelist.contains(domain) else { return }
+        saveWhitelist((whitelist + [domain]).sorted())
+    }
+
+    func removeFromWhitelist(_ domain: String) {
+        saveWhitelist(whitelist.filter { $0 != domain })
+    }
+
+    private func saveWhitelist(_ domains: [String]) {
+        do {
+            try WhitelistStore.save(domains)
+            whitelist = domains
+        } catch {
+            alert("Не удалось сохранить белый список", error.localizedDescription).runModal()
+        }
     }
 
     func cleanHistory() {
