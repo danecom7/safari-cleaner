@@ -8,3 +8,12 @@ build/
 *.swp
 *~
 *.tmp
+
+# Личные данные: никогда не должны попасть в репозиторий
+whitelist.json
+*.binarycookies*
+History.db*
+*-backup/
+*.sqlite*
+*.log
+reports/
