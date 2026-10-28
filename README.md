@@ -6,7 +6,7 @@
 
 ![Меню Safari Cleaner](docs/menu.png)
 
-*English version below.*
+*[English version](README.en.md)*
 
 ## Требования
 
@@ -120,30 +120,3 @@ macOS закрывает папки Safari от всех программ, по�
 ## Лицензия
 
 [MIT](LICENSE)
-
----
-
-## English
-
-**Safari Cleaner** is a small macOS menu bar app that clears Safari's cache, cookies with website data, and history in one click.
-
-- **Test mode** is on at every launch: buttons only show a report of what *would* be removed. Uncheck it to delete for real. Safari is quit first (like ⌘Q).
-- **Cookie whitelist**: sites (with their subdomains) whose cookies and website data are kept.
-- **Never touched**: bookmarks, tabs, passwords, form autofill, settings, extensions, iCloud sync data, other apps' cookies.
-- **iCloud**: history is removed on this Mac only. If Safari sync is on, it may come back from your other devices.
-
-**Requirements:** macOS 14+, Apple Silicon or Intel, Xcode Command Line Tools.
-
-**Install:**
-```
-xcode-select --install
-git clone https://github.com/danecom7/safari-cleaner.git
-cd safari-cleaner
-./build.sh
-cp -R build/SafariCleaner.app /Applications/
-```
-Then grant **Full Disk Access** in System Settings → Privacy & Security → Full Disk Access, and relaunch the app. Without an "Apple Development" certificate the app is signed ad-hoc and Full Disk Access must be re-enabled after each rebuild.
-
-**Uninstall:** quit the app, delete it from Applications, remove `~/Library/Application Support/SafariCleaner`, and remove it from the Full Disk Access list.
-
-License: MIT. The interface is in Russian.
